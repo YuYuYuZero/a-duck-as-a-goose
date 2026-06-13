@@ -679,8 +679,10 @@ function renderCustomer() {
     `<p class="desc" style="background:#fff;border:1px dashed #d8b97f;border-radius:10px;padding:8px 10px;font-size:12.5px">🧓 隔壁老张小声教你：<b>👁 眼力</b>星越多越容易认出鸭腿；<b>★ 影响力</b>越高，捧你上天或锤你入地。遇到 <b>❓</b> 看不出深浅的，宁可说售罄。</p>` : "";
   if (tutor) S.flags.tutorialShown = true;
 
+  const canCloseEarly = !anyStock && !isSpecialBuy && S.queue.length - S.qi > 1;
   $("stage").innerHTML = `
   ${stockChips()}
+  ${canCloseEarly ? `<button class="btn btn-primary" id="btnCloseEarly" style="width:100%;margin-bottom:10px;padding:12px;font-size:15px;background:linear-gradient(135deg,#6b5a41,#4a3c2c)">🌙 腿卖完了，提前收摊（跳过剩余 ${S.queue.length - S.qi} 位）</button>` : ""}
   <div class="queue-line">${left ? "后面还排着：" + left : "队伍最后一位"}　·　第 ${S.qi + 1}/${S.queue.length} 位</div>
   <div class="paper cust-card" id="custCard">
     <div class="kicker"><span>🏮 夜市进行中 · 售价 ¥${S.price}</span><span>今晚流水 ¥${S.c.nightRevenue}</span></div>
@@ -706,6 +708,14 @@ function renderCustomer() {
     </div>
     <div id="reactZone"></div>
   </div>`;
+  if (canCloseEarly) $("btnCloseEarly").onclick = () => {
+    AUDIO.click();
+    const skipped = S.queue.length - S.qi;
+    S.c.soldOut += skipped;
+    applyFx({ trust: [-2, -1], hype: [-1, 0] });
+    pushChat("今晚卖光了！后面的散了吧", pick(CHAT_NAMES), "sys");
+    endStall();
+  };
   $("serveBtns").querySelectorAll(".serve-btn").forEach(b => b.onclick = () => act(b.dataset.act, c));
 }
 function react(text, cls, then, delay) {
@@ -715,7 +725,7 @@ function react(text, cls, then, delay) {
   let done = false;
   const go = () => { if (done) return; done = true; then(); };
   zone.querySelector(".reaction").onclick = go;
-  setTimeout(go, delay || 1300);
+  setTimeout(go, delay || 800);
 }
 function nextCustomer() { S.qi++; renderCustomer(); }
 
@@ -734,7 +744,7 @@ function act(action, c) {
     AUDIO.coin();
     pushChat("？？？黄牛把今晚的腿全包了？？", pick(CHAT_NAMES), "hot");
     pushChat("排了俩小时，你告诉我没了？", pick(CHAT_NAMES), "hot");
-    return react(`刀哥点了 ${legs} 只腿的现金，拍拍你的肩："阿姨，痛快。明晚见。"<br>队伍后面传来此起彼伏的叹气声。`, "mid", endStall, 1600);
+    return react(`刀哥点了 ${legs} 只腿的现金，拍拍你的肩："阿姨，痛快。明晚见。"<br>队伍后面传来此起彼伏的叹气声。`, "mid", endStall, 1000);
   }
   if (action === "scalpNo") {
     applyFx({ trust: [3, 6], conscience: [1, 3], hype: [1, 3] });
@@ -783,7 +793,7 @@ function act(action, c) {
     return react(pick([
       `"鸭腿也香，还便宜！" ${esc(c.n)}啃得很满足。`,
       `${esc(c.n)}看了眼「烤鸭腿」的小牌，笑了："这样挺好，不用猜。"`,
-      `"实诚！" ${esc(c.n)}说下次要带全宿舍来。`]), "ok", nextCustomer, 1000);
+      `"实诚！" ${esc(c.n)}说下次要带全宿舍来。`]), "ok", nextCustomer, 700);
   }
   /* 上腿 */
   const leg = action;
@@ -801,7 +811,7 @@ function act(action, c) {
     AUDIO.alarm();
     shakeStage();
     pushChat("刚才那个夹克男是市监局的？！", pick(CHAT_NAMES), "hot");
-    return react(`他咬了一口，慢慢放下，亮出工作证："这不是鹅腿。${leg === "green" ? "而且，它为什么是绿的？" : ""}"<br>你眼前一黑。腿钱没收，样品被带走了。`, "bad", nextCustomer, 1800);
+    return react(`他咬了一口，慢慢放下，亮出工作证："这不是鹅腿。${leg === "green" ? "而且，它为什么是绿的？" : ""}"<br>你眼前一黑。腿钱没收，样品被带走了。`, "bad", nextCustomer, 1200);
   }
   /* 维权群群主：必盘问 */
   if (c.kind === "owner") {
@@ -828,7 +838,7 @@ function act(action, c) {
     return react(c.kind === "rich" ? `他扫码付了双倍，摆摆手走了。你看着到账提醒愣了三秒。` :
       pick([`${esc(c.n)}咬了一大口，幸福地眯起眼："就是这个味！"`,
         `"真香。" ${esc(c.n)}竖起大拇指，蹲在路边开炫。`,
-        `${esc(c.n)}小心翼翼捧着腿，像捧着这学期的绩点。`]), "ok", nextCustomer, 1000);
+        `${esc(c.n)}小心翼翼捧着腿，像捧着这学期的绩点。`]), "ok", nextCustomer, 700);
   }
   /* 鸭腿/翡翠腿：识破判定 */
   const p = clamp(EYE_P[c.y] + (leg === "green" ? .28 : 0) + (S.priceTag === "hard" ? .06 : 0), 0, .95);
@@ -847,7 +857,7 @@ function act(action, c) {
   return react(pick([
     `${esc(c.n)}毫无察觉，吃得满嘴流油："不愧是传说中的鹅腿！"`,
     `"果然名不虚传！" ${esc(c.n)}发了九宫格朋友圈。`,
-    `${esc(c.n)}边吃边点头。你默默移开了视线。`]), leg === "green" ? "mid" : "ok", nextCustomer, 1000);
+    `${esc(c.n)}边吃边点头。你默默移开了视线。`]), leg === "green" ? "mid" : "ok", nextCustomer, 700);
 }
 function shakeStage() {
   const card = $("custCard") || $("stage").firstElementChild;
@@ -886,14 +896,14 @@ function resolveQuiz(k, q, c, leg, hard) {
       applyFx({ trust: [-8, -5], risk: [12, 18], hype: [6, 10], conscience: [-2, -1] });
       AUDIO.bad(); shakeStage();
       pushChat("群主把对话录屏发群里了！", pick(CHAT_NAMES), "hot");
-      return react(`${esc(q.w.t)}<br><br>群主面无表情："少来这套。"他举起手机，红点正在闪烁。`, "bad", nextCustomer, 1800);
+      return react(`${esc(q.w.t)}<br><br>群主面无表情："少来这套。"他举起手机，红点正在闪烁。`, "bad", nextCustomer, 1200);
     }
     S.c.quizWin++; S.c[leg + "Sold"]++; S.c.weekLegs++; S.c.nightRevenue += pay;
     applyFx({ cash: pay, hype: [2, 5], risk: [1, 3], conscience: [-2, -1], trust: [0, 1] });
     remember(c, "cheated");
     AUDIO.good();
     pushChat("阿姨这张嘴，去说相声屈才了", pick(CHAT_NAMES));
-    return react(`你：「${esc(q.w.t)}」<br><br>${esc(q.w.r)}<br><span style="opacity:.7">（糊弄成功 +1）</span>`, "ok", nextCustomer, 1700);
+    return react(`你：「${esc(q.w.t)}」<br><br>${esc(q.w.r)}<br><span style="opacity:.7">（糊弄成功 +1）</span>`, "ok", nextCustomer, 1100);
   }
   if (k === "r") {
     S.c.quizLose++;
@@ -903,7 +913,7 @@ function resolveQuiz(k, q, c, leg, hard) {
     AUDIO.bad(); shakeStage();
     pushChat("完了，现场视频已经出来了", pick(CHAT_NAMES), "hot");
     pushChat(pick(CHAT_DOOM), pick(CHAT_NAMES), "hot");
-    return react(`你：「${esc(q.r.t)}」<br><br>${esc(q.r.r)}<br><span style="opacity:.7">（这只腿没卖出去，还翻了车）</span>`, "bad", nextCustomer, 1900);
+    return react(`你：「${esc(q.r.t)}」<br><br>${esc(q.r.r)}<br><span style="opacity:.7">（这只腿没卖出去，还翻了车）</span>`, "bad", nextCustomer, 1200);
   }
   /* 坦白：部分顾客会按鸭腿价付款 */
   S.c.confess++;
@@ -914,7 +924,7 @@ function resolveQuiz(k, q, c, leg, hard) {
   AUDIO.good();
   pushChat("阿姨居然当场承认了？？这下反而有点敬佩", pick(CHAT_NAMES));
   const confessTip = confessPay ? "（按鸭腿价收了钱。良心记住了你）" : "（退了这单。良心记住了你）";
-  return react(`你：「${esc(q.c.t)}」<br><br>${esc(q.c.r)}<br><span style="opacity:.7">${confessTip}</span>`, "mid", nextCustomer, 1700);
+  return react(`你：「${esc(q.c.t)}」<br><br>${esc(q.c.r)}<br><span style="opacity:.7">${confessTip}</span>`, "mid", nextCustomer, 1100);
 }
 
 /* ---------------- end of stall ---------------- */
