@@ -1036,16 +1036,18 @@ function showEnding(end) {
     </div>
     ${badges.length ? `<div class="badges">${badges.map(b => `<span class="badge">${b.e} ${b.t}</span>`).join("")}</div>` : ""}
     <div class="end-btns">
-      <button class="btn btn-primary" id="btnShare" style="padding:13px">📋 复制战报，喊朋友来比比</button>
-      <button class="btn btn-ghost" id="btnAgain" style="padding:12px;font-size:15px">🔥 再摆一周</button>
-      <button class="btn btn-ghost" id="btnBack" style="padding:12px;font-size:15px">🏠 回到首页</button>
+      <button class="btn btn-primary" id="btnShare">📋 复制战报，喊朋友来比比</button>
+      <button class="btn btn-ghost" id="btnCustEnd" style="border-color:rgba(126,201,126,.5);color:#7ec97e">🧑‍🎓 换个视角：当一回排队的人</button>
+      <button class="btn btn-ghost" id="btnAgain">🔥 再摆一周</button>
+      <button class="btn btn-ghost" id="btnBack">🏠 回到首页</button>
     </div>
   </div>`;
   confetti(end.grade === "S" ? ["🪿", "✨", "🍗", "🎉"] : end.grade === "C" ? ["🦆", "💧", "📉"] : ["🍗", "✨"]);
   $("btnShare").onclick = () => shareResult(end);
+  $("btnCustEnd").onclick = () => { scr.hidden = true; showCustRoleSelect(); };
   $("btnAgain").onclick = () => { scr.hidden = true; startGame(); };
   $("btnBack").onclick = () => { scr.hidden = true; showLanding(); };
-  $("btnCustMode").style.display = "";
+  unlockCustBtn();
 }
 function confetti(emojis) {
   for (let i = 0; i < 26; i++) {
@@ -1108,7 +1110,7 @@ function showLanding() {
   CS = null;
   renderDex();
   const dex = JSON.parse(localStorage.getItem("zywe_dex") || "[]");
-  if (dex.length > 0) $("btnCustMode").style.display = "";
+  if (dex.length > 0) unlockCustBtn();
 }
 const MODALS = {
   how: { t: "📖 怎么玩", b: `<ul>
@@ -1520,6 +1522,14 @@ function showCustRoleSelect() {
   $("ovl").onclick = e => { if (e.target.id === "ovl") root.innerHTML = ""; };
 }
 
+function unlockCustBtn() {
+  const b = $("btnCustMode");
+  if (!b) return;
+  b.style.opacity = "1";
+  b.style.pointerEvents = "";
+  b.textContent = "🧑‍🎓 换个视角：当一回排队的人";
+}
+
 /* ---------------- game start / boot ---------------- */
 function startGame() {
   S = newState();
@@ -1537,7 +1547,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(() => { const t = $("teaser"); if (t && !$("landing").hidden) t.textContent = pick(TEASERS); }, 3200);
   $("btnStart").onclick = () => { AUDIO.ensure(); AUDIO.good(); startGame(); };
   const dex = JSON.parse(localStorage.getItem("zywe_dex") || "[]");
-  if (dex.length > 0) $("btnCustMode").style.display = "";
+  if (dex.length > 0) unlockCustBtn();
   $("btnCustMode").onclick = () => { AUDIO.ensure(); AUDIO.good(); showCustRoleSelect(); };
   $("btnHelp").onclick = () => openModal("tips");
   $("btnHome").onclick = () => { if (confirm("收摊回首页？本局进度不保存哦")) { stopAmbient(); showLanding(); } };
