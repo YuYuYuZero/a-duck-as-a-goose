@@ -1405,7 +1405,7 @@ function showCustResult(text, then) {
   let done = false;
   const go = () => { if (done) return; done = true; then(); };
   zone.querySelector(".result-box").onclick = go;
-  setTimeout(go, 1500);
+  setTimeout(go, 800);
 }
 
 function custEveningPhase(gotDuck) {
