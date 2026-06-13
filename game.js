@@ -104,6 +104,104 @@ const QUIZZES = [
 /* 盘问后果 */
 const EYE_P = [0, .04, .1, .2, .32, .5]; // 眼力→识破概率
 
+/* ---------- 记忆系统 ---------- */
+function remember(c, outcome) {
+  if (c.kind || c.returning) return;
+  S.memory.push({ e: c.e, n: c.n, day: S.day, outcome, y: c.y, i: c.i });
+  if (S.memory.length > 20) S.memory.shift();
+}
+const RETURN_LINES = {
+  cheated:   ["阿姨，上次那只腿……我回去越想越不对。", "我特意带了个学生物的朋友来。", "这次我要亲眼看你从哪个箱子拿腿。"],
+  honest:    ["上次的鸭腿真不错，今天还有吗？", "阿姨，我带室友来了，就冲你实诚。", "同样的鸭腿，再来一只！"],
+  confessed: ["上次你退我钱的事我一直记着。", "阿姨办事敞亮，今天特地来捧场。", "我在群里帮你说了好话，今天再来看看。"],
+  caught:    ["我就是来看看你改没改。", "这次再试试？我录像功能已经打开了。", "我朋友也想来见识见识。"],
+  goose:     ["上次的鹅腿太好吃了，今天还要！", "阿姨我又来了！老规矩！", "带室友来回购了，她也要尝尝。"],
+  soldout:   ["上次没买到，今天提前一小时来蹲的。", "排了两次都没吃到，今天必须买到！"]
+};
+function buildReturners() {
+  if (S.day <= 1 || !S.memory.length) return [];
+  const pool = S.memory.filter(m => m.day < S.day && chance(.35));
+  return pool.slice(0, 2).map(m => {
+    const c = { e: m.e, n: m.n, i: m.i, y: m.y, returning: true, returnType: m.outcome };
+    if (m.outcome === "cheated")   { c.y = clamp(m.y + 2, 1, 5); c.l = pick(RETURN_LINES.cheated); }
+    else if (m.outcome === "honest")  { c.y = Math.max(1, m.y - 1); c.l = pick(RETURN_LINES.honest); }
+    else if (m.outcome === "confessed") { c.y = Math.max(1, m.y - 1); c.i = clamp(m.i + 1, 1, 5); c.l = pick(RETURN_LINES.confessed); }
+    else if (m.outcome === "caught")  { c.y = 5; c.i = clamp(m.i + 1, 1, 5); c.l = pick(RETURN_LINES.caught); }
+    else if (m.outcome === "goose")   { c.l = pick(RETURN_LINES.goose); }
+    else { c.l = pick(RETURN_LINES.soldout); }
+    return c;
+  });
+}
+
+/* ---------- 互动群聊 ---------- */
+const CHAT_QUESTIONS = [
+  { q: "今天到底是鹅还是鸭啊？在线等，挺急的", opts: [
+    { t: "当然是鹅！来就完了 🪿", fx: { hype: [2, 4], risk: [1, 3] } },
+    { t: "今天进了什么卖什么，来了就知道", fx: { trust: [1, 3] } },
+    { t: "（假装没看见）", fx: {} }
+  ]},
+  { q: "阿姨今晚几点出摊？我要翘自习来排", opts: [
+    { t: "老时间！别翘课，先把作业写完", fx: { trust: [2, 4], hype: [1, 2] } },
+    { t: "来晚了可就没了哦～", fx: { hype: [3, 5] } },
+    { t: "（假装没看见）", fx: {} }
+  ]},
+  { q: "有人拼团吗？五个人起送打九折可以不", opts: [
+    { t: "不讲价！但五人团我多送一包辣椒面", fx: { trust: [2, 4], hype: [2, 3], cash: [-5, -2] } },
+    { t: "这主意好，搞个拼团接龙！", fx: { hype: [4, 7], risk: [1, 2] } },
+    { t: "（假装没看见）", fx: {} }
+  ]},
+  { q: "昨天的腿是不是小了点？就我一个人觉得？", opts: [
+    { t: "每只腿大小不一样很正常，是散养鹅嘛", fx: { risk: [-2, 0], trust: [1, 2] } },
+    { t: "你觉得小，那明天给你挑个大的", fx: { trust: [2, 4], conscience: [1, 2] } },
+    { t: "（假装没看见）", fx: { risk: [1, 3] } }
+  ]},
+  { q: "说实话，就算是鸭腿我也吃，好吃就行了", opts: [
+    { t: "哈哈哈你这话我存了，当免责声明用", fx: { hype: [2, 4], conscience: [-1, 0] } },
+    { t: "放心，每只腿品类都会标清楚的", fx: { trust: [2, 4], conscience: [1, 2] } },
+    { t: "（假装没看见）", fx: {} }
+  ]},
+  { q: "隔壁老李开始卖了，要不要去探探敌情", opts: [
+    { t: "不用管他，做好自己的腿就行", fx: { trust: [2, 3], conscience: [1, 2] } },
+    { t: "去！拍个照回来给大家品鉴品鉴", fx: { hype: [3, 5], risk: [1, 3] } },
+    { t: "（假装没看见）", fx: {} }
+  ]}
+];
+let chatQTimer = null;
+function showChatQuestion() {
+  if (!S || S.over || busy) return;
+  const pool = CHAT_QUESTIONS.filter((_, i) => !S.usedChatQ.includes(i));
+  if (!pool.length) return;
+  const idx = CHAT_QUESTIONS.indexOf(pick(pool));
+  S.usedChatQ.push(idx);
+  const cq = CHAT_QUESTIONS[idx];
+  const feed = $("chatFeed");
+  if (!feed) return;
+  pushChat(cq.q, pick(CHAT_NAMES), S.risk >= 50 ? "hot" : "");
+  const wrap = document.createElement("div");
+  wrap.className = "chat-reply-wrap";
+  wrap.innerHTML = cq.opts.map((o, i) => `<button class="chat-reply-btn" data-i="${i}">${esc(o.t)}</button>`).join("");
+  feed.appendChild(wrap);
+  feed.scrollTop = feed.scrollHeight;
+  wrap.querySelectorAll(".chat-reply-btn").forEach(b => b.onclick = () => {
+    const opt = cq.opts[+b.dataset.i];
+    wrap.remove();
+    if (opt.t.includes("假装没看见")) {
+      pushChat("阿姨不回消息了……", pick(CHAT_NAMES));
+    } else {
+      pushChat(opt.t, "鹅腿阿姨🪿", "sys");
+      const reactions = ["哈哈哈哈阿姨说话太有意思了", "有被阿姨可爱到", "阿姨在线回复！尊贵感拉满", "笑死，存到收藏夹了"];
+      setTimeout(() => pushChat(pick(reactions), pick(CHAT_NAMES)), 800);
+    }
+    AUDIO.click();
+    applyFx(opt.fx);
+  });
+  const autoSkip = setTimeout(() => { if (wrap.parentNode) wrap.remove(); }, 15000);
+  const origRemove = wrap.remove.bind(wrap);
+  wrap.remove = () => { clearTimeout(autoSkip); origRemove(); };
+}
+function startChatQ() { stopChatQ(); chatQTimer = setInterval(() => { if (chance(.3)) showChatQuestion(); }, 8000); }
+function stopChatQ() { if (chatQTimer) { clearInterval(chatQTimer); chatQTimer = null; } }
+
 /* 弹幕池 */
 const CHAT_NAMES = ["鹅腿等等我", "绩点3.9还在抢腿", "今晚吃什么·清", "圆明园技校碳水组", "中关村文理干饭人", "Linda在国贸", "匿名水友", "显微镜侠", "夜宵雷达", "腿圈纪检委", "干饭不积极思想有问题", "蹲腿第七天"];
 const CHAT_CALM = [
@@ -118,7 +216,15 @@ const CHAT_CALM = [
   "今天风好大，腿都吹凉了还在排",
   "限购一只真的悲伤，我能炫三只",
   "蹲到了！朋友圈先发为敬",
-  "建议办张会员卡，我能吃到毕业"
+  "建议办张会员卡，我能吃到毕业",
+  "刚咬第一口我室友就后悔没来了",
+  "这个酱料配方建议申遗",
+  "我已经连续七天排队了，比上班打卡还准时",
+  "有没有人统计过这学期的腿均消费",
+  "阿姨笑起来好温柔，像我姥姥",
+  "大冬天的路灯下排队，我们在干什么啊哈哈哈",
+  "刚发了九宫格，已经三十个人问定位了",
+  "这才是真正的夜校吧"
 ];
 const CHAT_SUS = [
   "理性讨论：鹅和鸭真有人吃得出区别吗？",
@@ -129,7 +235,12 @@ const CHAT_SUS = [
   "显微镜网友已就位 🔬",
   "蹲一个后续，瓜子已备好",
   "群里有人说差点吃出问题？求证",
-  "建议公示一下进货单（理性发言）"
+  "建议公示一下进货单（理性发言）",
+  "楼下那位是不是在拍照取证？",
+  "我朋友是做食品检测的，要不要帮忙看看",
+  "价格涨了但腿没变大，是错觉吗",
+  "有人注意到招牌上「鹅」字磨损得特别快吗",
+  "纯好奇：鹅和鸭的骨头到底怎么分"
 ];
 const CHAT_DOOM = [
   "塌房倒计时？",
@@ -139,7 +250,11 @@ const CHAT_DOOM = [
   "记者朋友说在跟这个选题了",
   "市监局的热线我存好了",
   "当初排队三小时，如今维权九十九",
-  "求一个内部群，听说有大瓜"
+  "求一个内部群，听说有大瓜",
+  "刚才有人报警了吧？我看到有人打电话",
+  "这下全网都知道了",
+  "有律师出来说可以集体诉讼了",
+  "我把所有购买记录都留着呢"
 ];
 const CHAT_CBD = [
   "国贸的姐妹冲！比楼下轻食好吃多了",
@@ -298,7 +413,7 @@ const ENDINGS = [
   { id: "boom", death: true, grade: "C", e: "💥", t: "热搜第一，摊位归零", s: "流量兑现的那晚，退款群排到了第二页。", q: "「大家爱的从来不是鹅，是『不会被骗』这四个字。」", check: S => S.risk >= 100 },
   { id: "broke", death: true, grade: "C", e: "🕯️", t: "炭火熄灭", s: "现金归零。炉子是热的，账是凉的。", q: "「创业未半，而中道收摊。」", check: S => S.cash < 0 },
   { id: "hated", death: true, grade: "C", e: "😤", t: "维权群的全面胜利", s: "口碑清零，群主把你摊位的照片设成了群头像，留作纪念。", q: "「讹腿者，鹅腿也。」", check: S => S.trust <= 0 },
-  { id: "keeper", grade: "S", e: "🪿", t: "真·鹅腿守门人", s: "整整七天，摊上只有鹅腿，一只替身都没有。赚得不多，睡得极好。", q: "「鹅腿少的时候，我就只卖鹅腿。」", check: S => S.c.duckSold === 0 && S.c.greenSold === 0 && S.c.duckHonest === 0 },
+  { id: "keeper", grade: "S", e: "🪿", t: "真·鹅腿守门人", s: "整整七天，没有一只鸭腿冒充过鹅腿。赚得不多，睡得极好。", q: "「鹅腿少的时候，我就只卖鹅腿。」", check: S => S.c.duckSold === 0 && S.c.greenSold === 0 },
   { id: "fire", grade: "S", e: "🔥", t: "烟火气长存", s: "队伍不再是最长的，但每个排队的人都知道自己买的是什么。", q: "「我卖的是腿，押上的是名字。」", check: S => S.conscience >= 70 && S.trust >= 65 },
   { id: "tycoon", grade: "S", e: "💰", t: "万柳鹅腿大亨", s: "金链子、新三轮，和一摞看不太懂但很厚的合同。", q: "「恭喜！为儿子全款拿下万柳一平米。」", check: S => S.cash >= 2200 },
   { id: "cbdking", grade: "A", e: "🏙️", t: "从五道口到CBD", s: "Linda们叫你「腿姐」，还给你定制了工牌挂绳。", q: "「在国贸，连腿都要预约会议室。」", check: S => S.flags.cbd && S.cash >= 1600 },
@@ -330,13 +445,14 @@ let ambientTimer = null;
 
 function newState() {
   return {
-    day: 1, cash: 120, trust: 50, conscience: 60, risk: 10, hype: 22,
+    day: 1, cash: 150, trust: 50, conscience: 60, risk: 10, hype: 22,
     stock: { goose: 0, duck: 0, green: 0 },
     price: 32, priceTag: "mid",
     queue: [], qi: 0,
     flags: { cbd: false, hadRisk80: false, greenUnlockTold: false, tutorialShown: false },
     c: { gooseSold: 0, duckSold: 0, duckHonest: 0, greenSold: 0, quizWin: 0, quizLose: 0, confess: 0, soldOut: 0, nightRevenue: 0, weekLegs: 0 },
-    usedEvents: [], usedQuiz: [], over: false
+    memory: [],
+    usedEvents: [], usedQuiz: [], usedChatQ: [], over: false
   };
 }
 
@@ -410,16 +526,23 @@ function pushChat(text, name, cls) {
   feed.scrollTop = feed.scrollHeight;
 }
 function ambientChat() {
-  if (!S || S.over) return;
+  const inCust = CS && !CS.over;
+  const inMain = S && !S.over;
+  if (!inCust && !inMain) return;
   if (!chance(.55)) return;
   let pool = CHAT_CALM;
-  if (S.risk >= 65) pool = chance(.7) ? CHAT_DOOM : CHAT_SUS;
-  else if (S.risk >= 35) pool = chance(.5) ? CHAT_SUS : CHAT_CALM;
-  if (S.flags.cbd && chance(.3)) pool = CHAT_CBD;
-  pushChat(pick(pool), pick(CHAT_NAMES), S.risk >= 65 ? "hot" : "");
+  if (inCust) {
+    if (CS.suspicion >= 50) pool = chance(.6) ? CHAT_SUS : CHAT_CALM;
+    else if (CS.suspicion >= 30) pool = chance(.3) ? CHAT_SUS : CHAT_CALM;
+  } else {
+    if (S.risk >= 65) pool = chance(.7) ? CHAT_DOOM : CHAT_SUS;
+    else if (S.risk >= 35) pool = chance(.5) ? CHAT_SUS : CHAT_CALM;
+    if (S.flags.cbd && chance(.3)) pool = CHAT_CBD;
+  }
+  pushChat(pick(pool), pick(CHAT_NAMES), (inCust ? CS.suspicion >= 50 : S.risk >= 65) ? "hot" : "");
 }
 function startAmbient() { stopAmbient(); ambientTimer = setInterval(ambientChat, 2800); }
-function stopAmbient() { if (ambientTimer) { clearInterval(ambientTimer); ambientTimer = null; } }
+function stopAmbient() { if (ambientTimer) { clearInterval(ambientTimer); ambientTimer = null; } stopChatQ(); }
 
 /* ---------------- header ---------------- */
 function renderHead(phaseName) {
@@ -428,7 +551,8 @@ function renderHead(phaseName) {
   $("placeLabel").textContent = (S.flags.cbd && S.day >= 5) ? CBD_PLACE : PLACES[S.day - 1] || PLACES[0];
   $("dayDots").innerHTML = Array.from({ length: TOTAL_DAYS }, (_, i) =>
     `<i class="${i + 1 < S.day ? "on" : i + 1 === S.day ? "now" : ""}"></i>`).join("");
-  $("watchers").textContent = (S.hype < 40 ? (S.hype / 10).toFixed(1) + "千" : (S.hype / 12).toFixed(1) + "万") + "人围观";
+  const watchNum = Math.round(S.hype * S.hype * 3.5 + 800);
+  $("watchers").textContent = (watchNum < 10000 ? (watchNum / 1000).toFixed(1) + "千" : (watchNum / 10000).toFixed(1) + "万") + "人围观";
 }
 
 /* ---------------- supply phase ---------------- */
@@ -518,6 +642,8 @@ function buildQueue() {
   const n = clamp(4 + Math.floor(S.hype / 16) + (S.flags.cbd ? 2 : 0) + ri(0, 2), 4, 12);
   const basePool = S.flags.cbd && S.day >= 5 ? CBD_POOL.concat(CAMPUS.slice(0, 5)) : CAMPUS;
   let q = shuffle(basePool).slice(0, n).map(c => Object.assign({}, c));
+  const returners = buildReturners();
+  returners.forEach(r => q.splice(ri(0, Math.max(0, q.length - 1)), 0, r));
   if (S.day === 2) q.splice(ri(1, Math.max(1, q.length - 1)), 0, Object.assign({}, SPECIALS.vip));
   if (S.day >= 3 && chance(.3)) q.splice(ri(0, q.length - 1), 0, Object.assign({}, SPECIALS.rich));
   if (S.risk >= 45 && chance(.55)) q.splice(ri(1, q.length - 1), 0, Object.assign({}, SPECIALS.cop));
@@ -530,6 +656,7 @@ function startStall() {
   renderHead("出摊");
   S.queue = buildQueue(); S.qi = 0; S.c.nightRevenue = 0;
   startAmbient();
+  startChatQ();
   pushChat(`今晚 ${("第" + S.day + "夜")} 开摊！坐标：${$("placeLabel").textContent}`, null, "sys");
   renderCustomer();
 }
@@ -560,7 +687,7 @@ function renderCustomer() {
     ${tutor}
     <div class="cust-top">
       <div class="avatar">${c.e}</div>
-      <div><div class="cust-name">${esc(c.n)}</div>
+      <div><div class="cust-name">${esc(c.n)}${c.returning ? ' <span style="font-size:11px;color:#b4582a;border:1px solid #c96a39;border-radius:5px;padding:1px 5px;margin-left:4px">回头客</span>' : ""}</div>
         <div class="cust-badges">
           <span class="bb">★ 影响力 ${starStr(c.i, "★")}</span>
           <span class="bb">👁 眼力 ${starStr(c.y, "👁")}</span>
@@ -583,8 +710,12 @@ function renderCustomer() {
 }
 function react(text, cls, then, delay) {
   $("serveBtns").style.display = "none";
-  $("reactZone").innerHTML = `<div class="reaction ${cls}">${text}</div>`;
-  setTimeout(then, delay || 1300);
+  const zone = $("reactZone");
+  zone.innerHTML = `<div class="reaction ${cls}" style="cursor:pointer">${text}<div style="text-align:center;font-size:11px;color:inherit;opacity:.5;margin-top:6px">点击继续 ▸</div></div>`;
+  let done = false;
+  const go = () => { if (done) return; done = true; then(); };
+  zone.querySelector(".reaction").onclick = go;
+  setTimeout(go, delay || 1300);
 }
 function nextCustomer() { S.qi++; renderCustomer(); }
 
@@ -622,6 +753,7 @@ function act(action, c) {
       return react(`群主冷笑："售罄？行，我明天再来。我们群最不缺的就是耐心。"`, "mid", nextCustomer);
     }
     applyFx({ trust: c.kind === "vip" ? [-3, -1] : [-2, -1], hype: c.kind === "vip" ? [-3, -1] : [0, 0] });
+    remember(c, "soldout");
     return react(pick([
       `"啊……" ${esc(c.n)}失落地看了眼炉子上滋滋作响的腿，转身走了。`,
       `${esc(c.n)}叹了口气："蹲了一晚上又没赶上。"`,
@@ -632,6 +764,7 @@ function act(action, c) {
     S.stock.duck--;
     const pay = (c.kind === "rich" ? 2 : 1) * dhPrice(S.price);
     S.c.duckHonest++; S.c.weekLegs++; S.c.nightRevenue += pay;
+    remember(c, "honest");
     if (c.kind === "cop") {
       applyFx({ cash: pay, risk: [-10, -6], trust: [2, 4] });
       AUDIO.good();
@@ -687,7 +820,9 @@ function act(action, c) {
     S.c.nightRevenue += pay;
     const fx = { cash: pay, trust: S.priceTag === "soft" ? [2, 3] : S.priceTag === "hard" ? [0, 1] : [1, 2], conscience: [1, 1] };
     if (c.i >= 4) fx.hype = [c.i, c.i + 3];
+    if (c.returning && c.returnType === "confessed") { fx.trust = [3, 5]; fx.hype = [2, 4]; }
     applyFx(fx);
+    remember(c, "goose");
     AUDIO.coin();
     if (c.i >= 4) pushChat(`${c.n} 发了测评！「真的是鹅，肉质骗不了人」`, pick(CHAT_NAMES));
     return react(c.kind === "rich" ? `他扫码付了双倍，摆摆手走了。你看着到账提醒愣了三秒。` :
@@ -705,6 +840,7 @@ function act(action, c) {
   const fx = { cash: pay, trust: [1, 2], conscience: leg === "green" ? [-5, -3] : [-3, -2], risk: leg === "green" ? [3, 5] : [1, 2] };
   if (c.i >= 4) fx.hype = [c.i + 1, c.i + 4];
   applyFx(fx);
+  remember(c, "cheated");
   AUDIO.coin();
   if (c.i >= 4) pushChat(`${c.n}发笔记安利了！「人生必吃的一只腿」`, pick(CHAT_NAMES), "hot");
   if (leg === "green" && chance(.5)) pushChat("怎么感觉今天的腿色号不太对……", pick(CHAT_NAMES));
@@ -754,6 +890,7 @@ function resolveQuiz(k, q, c, leg, hard) {
     }
     S.c.quizWin++; S.c[leg + "Sold"]++; S.c.weekLegs++; S.c.nightRevenue += pay;
     applyFx({ cash: pay, hype: [2, 5], risk: [1, 3], conscience: [-2, -1], trust: [0, 1] });
+    remember(c, "cheated");
     AUDIO.good();
     pushChat("阿姨这张嘴，去说相声屈才了", pick(CHAT_NAMES));
     return react(`你：「${esc(q.w.t)}」<br><br>${esc(q.w.r)}<br><span style="opacity:.7">（糊弄成功 +1）</span>`, "ok", nextCustomer, 1700);
@@ -762,17 +899,22 @@ function resolveQuiz(k, q, c, leg, hard) {
     S.c.quizLose++;
     const sev = (leg === "green" ? 4 : 0) + c.i * 2;
     applyFx({ trust: [-(6 + sev), -(3 + sev)], risk: [8 + sev, 13 + sev], hype: [4, 4 + c.i], conscience: [-2, -1] });
+    remember(c, "caught");
     AUDIO.bad(); shakeStage();
     pushChat("完了，现场视频已经出来了", pick(CHAT_NAMES), "hot");
     pushChat(pick(CHAT_DOOM), pick(CHAT_NAMES), "hot");
     return react(`你：「${esc(q.r.t)}」<br><br>${esc(q.r.r)}<br><span style="opacity:.7">（这只腿没卖出去，还翻了车）</span>`, "bad", nextCustomer, 1900);
   }
-  /* 坦白 */
+  /* 坦白：部分顾客会按鸭腿价付款 */
   S.c.confess++;
-  applyFx({ conscience: [5, 8], trust: [-3, -1], risk: [2, 4] });
+  const confessPay = chance(.5) ? dhPrice(pay) : 0;
+  if (confessPay) { S.c.weekLegs++; S.c.duckHonest++; S.c.nightRevenue += confessPay; }
+  remember(c, "confessed");
+  applyFx({ cash: confessPay, conscience: [5, 8], trust: [-3, -1], risk: [2, 4] });
   AUDIO.good();
   pushChat("阿姨居然当场承认了？？这下反而有点敬佩", pick(CHAT_NAMES));
-  return react(`你：「${esc(q.c.t)}」<br><br>${esc(q.c.r)}<br><span style="opacity:.7">（退了这单。良心记住了你）</span>`, "mid", nextCustomer, 1700);
+  const confessTip = confessPay ? "（按鸭腿价收了钱。良心记住了你）" : "（退了这单。良心记住了你）";
+  return react(`你：「${esc(q.c.t)}」<br><br>${esc(q.c.r)}<br><span style="opacity:.7">${confessTip}</span>`, "mid", nextCustomer, 1700);
 }
 
 /* ---------------- end of stall ---------------- */
@@ -903,6 +1045,7 @@ function showEnding(end) {
   $("btnShare").onclick = () => shareResult(end);
   $("btnAgain").onclick = () => { scr.hidden = true; startGame(); };
   $("btnBack").onclick = () => { scr.hidden = true; showLanding(); };
+  $("btnCustMode").style.display = "";
 }
 function confetti(emojis) {
   for (let i = 0; i < 26; i++) {
@@ -952,7 +1095,9 @@ const TEASERS = [
 ];
 function renderDex() {
   const dex = JSON.parse(localStorage.getItem("zywe_dex") || "[]");
-  $("dexCount").textContent = `${dex.length} / ${ENDINGS.length}`;
+  const mainIds = ENDINGS.map(e => e.id);
+  const mainCount = dex.filter(id => mainIds.includes(id)).length;
+  $("dexCount").textContent = `${mainCount} / ${ENDINGS.length}`;
   $("dexGrid").innerHTML = ENDINGS.map(e => dex.includes(e.id)
     ? `<div class="dex-cell"><span class="de">${e.e}</span>${e.t}</div>`
     : `<div class="dex-cell locked"><span class="de">❓</span>未解锁</div>`).join("");
@@ -960,7 +1105,10 @@ function renderDex() {
 function showLanding() {
   $("game").hidden = true; $("endingScr").hidden = true; $("landing").hidden = false;
   document.body.classList.remove("danger");
+  CS = null;
   renderDex();
+  const dex = JSON.parse(localStorage.getItem("zywe_dex") || "[]");
+  if (dex.length > 0) $("btnCustMode").style.display = "";
 }
 const MODALS = {
   how: { t: "📖 怎么玩", b: `<ul>
@@ -993,6 +1141,385 @@ function openModal(key) {
   $("ovl").onclick = e => { if (e.target.id === "ovl") root.innerHTML = ""; };
 }
 
+/* ================================================================
+   顾客视角模式 —— 换个角度看这只腿
+   ================================================================ */
+const CUST_DAYS = 5;
+const CUST_ROLES = [
+  { e: "🧑‍🎓", n: "你（考研党）", desc: "考研倒计时58天。你只想吃一只热乎的腿，回去背书。" },
+  { e: "👩‍🎓", n: "你（美食博主）", desc: "刚开始做美食号，粉丝237个。这只腿可能是你的第一篇爆款。" },
+  { e: "🤓", n: "你（生科院大一）", desc: "你在大学学的第一件事是：鹅和鸭的骨骼结构完全不同。" }
+];
+let CS = null; // customer state
+
+const CUST_STATS_META = {
+  wallet: { n: "钱包", i: "💸", max: 0 },
+  satisfaction: { n: "饱腹感", i: "🍗", max: 100 },
+  suspicion: { n: "疑心", i: "🔍", max: 100 },
+  influence: { n: "影响力", i: "📱", max: 100 }
+};
+
+function newCustState(roleIdx) {
+  const role = CUST_ROLES[roleIdx];
+  return {
+    day: 1, role: role, roleIdx: roleIdx,
+    wallet: 200, satisfaction: 30, suspicion: 15, influence: roleIdx === 1 ? 35 : 10,
+    stallTrust: 60, stallDuckRatio: 0,
+    legsBought: 0, legsReal: 0, legsFake: 0, timesQuestioned: 0, timesPosted: 0,
+    over: false, flags: {}
+  };
+}
+
+function renderCustStats() {
+  $("statsBar").innerHTML = Object.keys(CUST_STATS_META).map(k => {
+    const m = CUST_STATS_META[k];
+    return `<div class="stat s-${k}" id="stat-${k}">
+      <div class="si">${m.i}</div><div class="sn">${m.n}</div>
+      <div class="sv" id="sv-${k}">0</div>
+      <div class="bar"><i id="sb-${k}"></i></div></div>`;
+  }).join("");
+}
+
+function updateCustStats(deltas) {
+  for (const k of Object.keys(CUST_STATS_META)) {
+    const el = $("sv-" + k), bar = $("sb-" + k), box = $("stat-" + k);
+    if (!el) continue;
+    el.textContent = k === "wallet" ? "¥" + Math.round(CS[k]) : Math.round(CS[k]);
+    if (bar) {
+      const max = CUST_STATS_META[k].max;
+      bar.style.width = max ? clamp(CS[k] / max * 100, 0, 100) + "%" : clamp(CS.wallet / 300 * 100, 2, 100) + "%";
+    }
+    if (deltas && deltas[k]) {
+      box.classList.remove("pulse"); void box.offsetWidth; box.classList.add("pulse");
+      const f = document.createElement("span");
+      const v = deltas[k];
+      f.className = "fly-delta " + (v > 0 ? "up" : "down");
+      f.textContent = (v > 0 ? "+" : "") + (k === "wallet" ? "¥" + v : v);
+      box.appendChild(f); setTimeout(() => f.remove(), 1100);
+    }
+  }
+}
+
+function applyCustFx(fx) {
+  if (!fx || CS.over) return {};
+  const deltas = {};
+  for (const k in fx) {
+    if (!(k in CUST_STATS_META)) continue;
+    let v = fx[k];
+    if (Array.isArray(v)) v = ri(v[0], v[1]);
+    if (!v) continue;
+    CS[k] += v;
+    if (k !== "wallet") CS[k] = clamp(CS[k], 0, CUST_STATS_META[k].max);
+    deltas[k] = v;
+  }
+  updateCustStats(deltas);
+  return deltas;
+}
+
+const CUST_QUEUE_SCENES = [
+  { text: "寒风里，队伍从摊位一直排到了路灯下。你裹紧羽绒服，胃在叫。前面还有<b>二十多个人</b>。", place: "校东门 · 排队中" },
+  { text: "今天来得早，前面只有八个人。空气里飘着孜然和秘制酱料的味道，你的口水已经不争气了。", place: "校东门 · 排队中" },
+  { text: "队伍比昨天长了一倍。有人举着手机直播排队过程，弹幕在刷「羡慕」。", place: "校西门 · 排队中" },
+  { text: "你边排队边刷群。群里有人说昨天买到的腿<b>「感觉不太对」</b>。你低头看了眼摊位的招牌。", place: "校东门 · 排队中" },
+  { text: "最后一天了。你特地翘了晚自习来排。队伍出奇地长——好像所有人都知道这是最后的机会。", place: "校东门 · 最后一夜" }
+];
+
+const CUST_EVENTS = [
+  { day: 1, title: "第一口", scenes: [
+    { text: "轮到你了。阿姨笑着递来一只热腾腾的腿：「同学，慢走啊。」你迫不及待咬了一大口。", afterBuy: true },
+    { text: "肉汁在嘴里爆开——<b>好吃</b>，是真的好吃。你瞬间理解了为什么有人愿意排一个小时。" }
+  ]},
+  { day: 2, title: "第一个疑问", scenes: [
+    { text: "刚咬两口，旁边一个戴眼镜的同学凑过来：「你有没有觉得……这骨头的弧度不太对？」" },
+    { text: "你看了眼手里的腿。<b>说实话，你分不出鹅和鸭。</b>但那句话像一根刺，扎进了快乐里。" }
+  ]},
+  { day: 3, title: "群里炸了", scenes: [
+    { text: "打开手机，群消息999+。有人发了一张对比图：<b>左边是阿姨的腿，右边是超市的鸭腿。</b>骨骼形状……好像确实挺像的。" },
+    { text: "群主在征集「受害者证词」。已经有十几个人回复了。评论区两极分化：一半人说「本来就香」，一半人说「被骗了」。" }
+  ]},
+  { day: 4, title: "选边站", scenes: [
+    { text: "事情闹大了。本地媒体来采访了几个排队的同学。<b>你的闺蜜被拍到了</b>，正举着腿说「我不在乎是什么」。" },
+    { text: "你刷到了阿姨接受采访的视频。她说：「进到什么腿就写什么腿。」评论区出现了大面积的<b>「支持」</b>。" }
+  ]},
+  { day: 5, title: "最后一夜", scenes: [
+    { text: "最后一夜。阿姨的摊前多了一块手写牌子：<b>「今日品类：鹅腿×4 / 鸭腿×若干 / 明码标价」</b>。" },
+    { text: "你看着那块牌子愣了一会儿。也许从一开始，你买的就不只是一只腿——还有一个<b>关于信任的故事</b>。" }
+  ]}
+];
+
+function startCustGame(roleIdx) {
+  CS = newCustState(roleIdx);
+  busy = false;
+  $("landing").hidden = true; $("endingScr").hidden = true; $("game").hidden = false;
+  renderCustStats();
+  $("chatFeed").innerHTML = "";
+  pushChat("今晚出摊吗？蹲一个确认！", pick(CHAT_NAMES));
+  pushChat("出出出！快来排队！", pick(CHAT_NAMES));
+  updateCustStats();
+  custDayPhase();
+}
+
+function custDayPhase() {
+  if (CS.over) return;
+  const scene = CUST_QUEUE_SCENES[CS.day - 1] || CUST_QUEUE_SCENES[0];
+  $("dayLabel").textContent = `第 ${CS.day} 夜`;
+  $("phaseChip").textContent = "排队";
+  $("placeLabel").textContent = scene.place;
+  $("dayDots").innerHTML = Array.from({ length: CUST_DAYS }, (_, i) =>
+    `<i class="${i + 1 < CS.day ? "on" : i + 1 === CS.day ? "now" : ""}"></i>`).join("");
+  $("watchers").textContent = "";
+  startAmbient();
+
+  const price = 32 + (CS.day >= 4 ? 8 : 0);
+  const isDuckDay = CS.day >= 3 && chance(.4 + CS.day * .08);
+  CS.stallDuckRatio += isDuckDay ? 1 : 0;
+
+  $("stage").innerHTML = `
+  <div class="paper cust-card">
+    <span class="stamp">${CS.role.e} 顾客视角</span>
+    <div class="kicker"><span>🌙 第 ${CS.day} 夜</span><span>${CS.role.desc.slice(0, 20)}…</span></div>
+    <h2>排到你了</h2>
+    <p class="desc">${scene.text}</p>
+    <div class="choices">
+      <button class="choice" data-act="buy"><div class="ct">🍗 买一只（¥${price}）</div><div class="ch">排了这么久，不买对不起自己的腿。</div></button>
+      <button class="choice" data-act="inspect"><div class="ct">🔍 先看看再说</div><div class="ch">凑近观察一下摊上的腿，看看能发现什么。</div></button>
+      ${CS.day >= 3 ? `<button class="choice" data-act="leave"><div class="ct">🚶 算了，走了</div><div class="ch">群里的讨论让你不太放心。</div></button>` : ""}
+    </div>
+    <div id="evResult"></div>
+  </div>`;
+
+  $("stage").querySelectorAll(".choice").forEach(b => b.onclick = () => {
+    if (busy) return; busy = true;
+    AUDIO.click();
+    const act = b.dataset.act;
+    $("stage").querySelector(".choices").style.display = "none";
+
+    if (act === "leave") {
+      applyCustFx({ suspicion: [3, 6], satisfaction: [-8, -4] });
+      pushChat("有人排到了又走了？什么情况", pick(CHAT_NAMES));
+      showCustResult("你犹豫了一下，退出了队伍。身后立刻有人补了上来。<br>回宿舍的路上，你闻到了别人手里腿的香味。", () => custEveningPhase(null));
+      return;
+    }
+
+    if (act === "inspect") {
+      CS.timesQuestioned++;
+      const spotDuck = CS.roleIdx === 2 ? chance(.7) : chance(.25 + CS.suspicion / 200);
+      if (isDuckDay && spotDuck) {
+        applyCustFx({ suspicion: [12, 18] });
+        pushChat("那个同学在摊前看了好久", pick(CHAT_NAMES));
+        showCustResult(`你蹲下来仔细看了看烤架上的腿。骨骼弧度、肌肉纹理……<b>这不像鹅腿。</b><br>阿姨注意到你的眼神，笑容僵了一秒。`, () => {
+          custConfront(price, true);
+        });
+      } else {
+        applyCustFx({ suspicion: [-2, 2] });
+        showCustResult("你装作不经意地打量了一下。腿的色泽金黄，酱料均匀，看起来……挺正常的。<br>也许是群里的讨论让你想多了。", () => {
+          custBuyLeg(price, isDuckDay, false);
+        });
+      }
+      return;
+    }
+
+    /* buy */
+    custBuyLeg(price, isDuckDay, false);
+  });
+  busy = false;
+}
+
+function custBuyLeg(price, isDuck, knewItWasDuck) {
+  CS.legsBought++;
+  applyCustFx({ wallet: -price, satisfaction: [15, 25] });
+  if (isDuck) CS.legsFake++; else CS.legsReal++;
+  AUDIO.coin();
+
+  const ev = CUST_EVENTS[CS.day - 1];
+  let narrative = ev ? ev.scenes.map(s => s.text).join("<br><br>") : "你拿着腿走到路灯下。炭火的余温透过油纸袋，暖着你的手。";
+
+  if (isDuck && !knewItWasDuck && CS.roleIdx === 2 && chance(.5)) {
+    narrative += `<br><br>你咬了第三口的时候停住了——<b>这个骨骼密度，这个肌纤维走向……</b>这不是鹅。`;
+    applyCustFx({ suspicion: [10, 15] });
+  }
+
+  showCustResult(narrative, () => custEveningPhase(isDuck));
+}
+
+function custConfront(price, sawDuck) {
+  $("stage").querySelector("#evResult").innerHTML = `
+    <div class="result-box" style="margin-top:12px">
+      <div class="rt">— 你发现了异常 —</div>
+      <p>这只腿的骨骼形状和课本上的鹅完全不同。你要怎么做？</p>
+    </div>
+    <div class="choices" style="margin-top:10px">
+      <button class="choice" data-act="confront"><div class="ct">🗣 当面问阿姨</div><div class="ch">阿姨，这腿是不是比上次小了一圈？</div></button>
+      <button class="choice" data-act="buyanyway"><div class="ct">🤷 算了，好吃就行</div><div class="ch">管它鹅还是鸭，反正都是腿。</div></button>
+      <button class="choice" data-act="photo"><div class="ct">📸 拍照发群里</div><div class="ch">让大家一起来鉴定。</div></button>
+    </div>`;
+  $("stage").querySelectorAll(".choice").forEach(b => b.onclick = () => {
+    if (busy) return; busy = true;
+    AUDIO.click();
+    $("stage").querySelector(".choices:last-of-type").style.display = "none";
+    const a = b.dataset.act;
+    if (a === "confront") {
+      CS.timesQuestioned++;
+      const honest = chance(.4 + CS.stallTrust / 200);
+      if (honest) {
+        applyCustFx({ suspicion: [-5, -2], satisfaction: [5, 10], influence: [3, 6] });
+        showCustResult(`阿姨沉默了两秒，小声说：「同学眼力好。今天确实是鸭腿，差价退你。」<br>你收了退款，反而对她多了几分敬意。`, () => custEveningPhase(true));
+      } else {
+        applyCustFx({ suspicion: [8, 14], influence: [5, 10] });
+        showCustResult(`阿姨面不改色：「今年的鹅练了普拉提，比较紧致。」周围的人笑了。<br>你张了张嘴，被笑声淹没了。`, () => custEveningPhase(true));
+      }
+    } else if (a === "buyanyway") {
+      CS.legsBought++; CS.legsFake++;
+      applyCustFx({ wallet: -price, satisfaction: [10, 18], suspicion: [-3, 0] });
+      AUDIO.coin();
+      showCustResult("你叹了口气，付了钱。腿确实好吃。<br>也许真相没有味道重要——至少今晚是这样。", () => custEveningPhase(true));
+    } else {
+      CS.timesPosted++;
+      applyCustFx({ influence: [12, 20], suspicion: [5, 10] });
+      pushChat("有人在摊前拍照了！！", pick(CHAT_NAMES), "hot");
+      showCustResult("你拍了几张特写发到群里，配文：「大家看看这个骨头。」<br>三分钟后，回复已经看不过来了。", () => custEveningPhase(null));
+    }
+  });
+  busy = false;
+}
+
+function showCustResult(text, then) {
+  const zone = $("evResult");
+  zone.innerHTML = `
+    <div class="result-box" style="margin-top:12px;cursor:pointer">
+      <p>${text}</p>
+      <div style="text-align:center;font-size:11px;color:#b4582a;opacity:.5;margin-top:6px">点击继续 ▸</div>
+    </div>`;
+  let done = false;
+  const go = () => { if (done) return; done = true; then(); };
+  zone.querySelector(".result-box").onclick = go;
+  setTimeout(go, 3000);
+}
+
+function custEveningPhase(gotDuck) {
+  if (CS.over) return;
+  stopAmbient();
+  $("phaseChip").textContent = "深夜";
+
+  const chatMood = CS.suspicion >= 50 ? "hot" : "";
+  if (gotDuck === true) pushChat("今天那批腿……有人觉得味道变了吗", pick(CHAT_NAMES), chatMood);
+  else if (gotDuck === false) pushChat("今天的腿绝了！！回味无穷", pick(CHAT_NAMES));
+
+  const choices = [];
+  if (CS.legsBought > 0) {
+    choices.push({ t: "📱 发一条正面评价", h: "分享快乐，也攒人气。", fx: { influence: [4, 8], satisfaction: [2, 4] }, tag: "positive" });
+    if (CS.suspicion >= 30) {
+      choices.push({ t: "🔬 发一条质疑帖", h: "把你的观察告诉大家。", fx: { influence: [8, 15], suspicion: [3, 6] }, tag: "negative" });
+    }
+  }
+  choices.push({ t: "📖 不发了，回去学习", h: "考研/工作不等人。", fx: { satisfaction: [3, 5] }, tag: "silent" });
+  if (CS.day >= 3 && CS.suspicion >= 40) {
+    choices.push({ t: "⚖️ 加入维权群", h: "大家的力量更大。", fx: { influence: [10, 18], suspicion: [5, 8] }, tag: "weiquan" });
+  }
+
+  $("stage").innerHTML = `
+  <div class="paper">
+    <span class="stamp">深夜·宿舍</span>
+    <div class="kicker"><span>🛏️ 回到宿舍</span><span>第 ${CS.day} 夜</span></div>
+    <h2>关灯之前</h2>
+    <p class="desc">${gotDuck === true
+      ? "你看着手机里群聊翻涌的消息，想起今天那只腿。味道确实不错——但你总觉得少了点什么。也许是确定感。"
+      : gotDuck === false
+      ? "今天的腿真的很满足。你躺在床上，翻了翻群聊，大家也都在夸。"
+      : "今天什么也没吃到。你翻了翻群聊，有人晒图，有人吐槽，热闹是别人的。"}</p>
+    <div class="choices">${choices.map((c, i) => `
+      <button class="choice" data-i="${i}"><div class="ct">${esc(c.t)}</div><div class="ch">${esc(c.h)}</div></button>`).join("")}</div>
+    <div id="evResult"></div>
+  </div>`;
+
+  $("stage").querySelectorAll(".choice").forEach(b => b.onclick = () => {
+    if (busy) return; busy = true;
+    AUDIO.click();
+    const ch = choices[+b.dataset.i];
+    $("stage").querySelector(".choices").style.display = "none";
+    applyCustFx(ch.fx);
+    if (ch.tag === "positive") CS.timesPosted++;
+    if (ch.tag === "negative") { CS.timesPosted++; CS.stallTrust -= 10; }
+    if (ch.tag === "weiquan") { CS.flags.joinedWeiquan = true; CS.stallTrust -= 15; }
+
+    const results = {
+      positive: "你发了一条九宫格——金黄的腿、排队的人群、路灯下的笑脸。<br>室友凑过来：「明天我也去。」",
+      negative: "你斟酌了半天措辞，发了一条「理性讨论」帖。配了骨骼对比图。<br>评论区瞬间分成两派。你关掉手机，心跳有点快。",
+      silent: "你放下手机，拿起了书/电脑。有些事情不需要立刻有答案。",
+      weiquan: "你被拉进了「讹腿维权群」。群公告写着：收集证据，理性维权。<br>群里已经九百多人了。你默默爬了一会儿楼。"
+    };
+    showCustResult(results[ch.tag] || results.silent, () => custEndDay());
+  });
+  busy = false;
+}
+
+function custEndDay() {
+  if (CS.over) return;
+  CS.stallTrust = clamp(CS.stallTrust + ri(-5, 5), 20, 90);
+  CS.day++;
+  if (CS.day > CUST_DAYS || CS.wallet < 20) return showCustEnding();
+  custDayPhase();
+}
+
+const CUST_ENDINGS = [
+  { id: "ce_truth", e: "🔬", t: "真相猎人", s: "你没有被味道说服。骨头不会说谎，你也不会。", q: "「好吃是一回事，是什么是另一回事。」", check: CS => CS.timesQuestioned >= 3 && CS.suspicion >= 50 },
+  { id: "ce_loyal", e: "🧡", t: "铁杆腿粉", s: "管它鹅还是鸭，排队本身就是青春。", q: "「毕业以后，我会想念的不是腿，是排队时身边的人。」", check: CS => CS.legsBought >= 4 && CS.suspicion < 40 },
+  { id: "ce_kol", e: "📱", t: "腿圈意见领袖", s: "你的帖子被转发了一万次。有人叫你「腿圈纪检委」。", q: "「我只是发了一张照片。剩下的，是互联网自己在发酵。」", check: CS => CS.influence >= 60 },
+  { id: "ce_weiquan", e: "⚖️", t: "维权先锋", s: "九百人的群里，你是最活跃的那一个。", q: "「不是为了退那几十块钱。是为了不让下一个人还要猜。」", check: CS => CS.flags.joinedWeiquan },
+  { id: "ce_peace", e: "🍂", t: "路灯下的普通人", s: "你排过队，吃过腿，发过一条朋友圈。然后继续过日子了。", q: "「人生没有那么多真相值得追。天冷，腿热乎，够了。」", check: () => true }
+];
+
+function showCustEnding() {
+  CS.over = true;
+  stopAmbient();
+  const end = CUST_ENDINGS.find(e => e.check(CS)) || CUST_ENDINGS[CUST_ENDINGS.length - 1];
+  unlockEnding(end.id);
+  AUDIO.end();
+  $("game").hidden = true;
+  const scr = $("endingScr");
+  scr.hidden = false;
+  scr.innerHTML = `
+  <div class="paper end-card">
+    <div class="end-emoji">${end.e}</div><br>
+    <span class="end-grade g-A">顾客结局 · 第 ${Math.min(CS.day, CUST_DAYS)} 夜</span>
+    <div class="end-new">🧑‍🎓 顾客视角</div>
+    <div class="end-title">${end.t}</div>
+    <div class="end-sub">${end.s}</div>
+    <div class="end-quote">${end.q}</div>
+    <div class="end-stats">
+      <div class="end-stat">剩余钱包<b>¥${Math.round(CS.wallet)}</b></div>
+      <div class="end-stat">买到<b>${CS.legsBought} 只腿</b></div>
+      <div class="end-stat">其中疑似鸭腿<b>${CS.legsFake} 只</b></div>
+      <div class="end-stat">质疑次数<b>${CS.timesQuestioned}</b></div>
+      <div class="end-stat">发帖次数<b>${CS.timesPosted}</b></div>
+      <div class="end-stat">最终疑心<b>${Math.round(CS.suspicion)}%</b></div>
+    </div>
+    <div class="end-btns">
+      <button class="btn btn-ghost" id="btnCustAgain" style="padding:12px;font-size:15px">🧑‍🎓 换个角色再来</button>
+      <button class="btn btn-ghost" id="btnBack" style="padding:12px;font-size:15px">🏠 回到首页</button>
+    </div>
+  </div>`;
+  confetti(["🍗", "🧑‍🎓", "✨"]);
+  $("btnCustAgain").onclick = () => { scr.hidden = true; showCustRoleSelect(); };
+  $("btnBack").onclick = () => { scr.hidden = true; showLanding(); };
+}
+
+function showCustRoleSelect() {
+  const root = $("modalRoot");
+  root.innerHTML = `<div class="overlay" id="ovl"><div class="paper modal-card">
+    <h3>🧑‍🎓 选择你的身份</h3>
+    <div class="mb"><p>这一次，你不是摊主——你是排队的人。<br>同一只腿，换个角度看。</p></div>
+    <div class="choices">${CUST_ROLES.map((r, i) => `
+      <button class="choice" data-i="${i}"><div class="ct">${r.e} ${r.n}</div><div class="ch">${r.desc}</div></button>`).join("")}</div>
+  </div></div>`;
+  root.querySelectorAll(".choice").forEach(b => b.onclick = () => {
+    root.innerHTML = "";
+    AUDIO.good();
+    startCustGame(+b.dataset.i);
+  });
+  $("ovl").onclick = e => { if (e.target.id === "ovl") root.innerHTML = ""; };
+}
+
 /* ---------------- game start / boot ---------------- */
 function startGame() {
   S = newState();
@@ -1009,6 +1536,10 @@ document.addEventListener("DOMContentLoaded", () => {
   renderDex();
   setInterval(() => { const t = $("teaser"); if (t && !$("landing").hidden) t.textContent = pick(TEASERS); }, 3200);
   $("btnStart").onclick = () => { AUDIO.ensure(); AUDIO.good(); startGame(); };
+  const dex = JSON.parse(localStorage.getItem("zywe_dex") || "[]");
+  if (dex.length > 0) $("btnCustMode").style.display = "";
+  $("btnCustMode").onclick = () => { AUDIO.ensure(); AUDIO.good(); showCustRoleSelect(); };
+  $("btnHelp").onclick = () => openModal("tips");
   $("btnHome").onclick = () => { if (confirm("收摊回首页？本局进度不保存哦")) { stopAmbient(); showLanding(); } };
   $("btnSound").textContent = AUDIO.on ? "🔊" : "🔇";
   $("btnSound").onclick = () => {

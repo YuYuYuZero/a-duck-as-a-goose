@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0b1020">
-<meta name="description" content="《指鸭为鹅》是一款虚构的烤腿摊求生模拟器：鹅腿不够的夜晚，你会上什么腿？7天经营，13种结局。">
+<meta name="description" content="《指鸭为鹅》是一款虚构的烤腿摊求生模拟器：鹅腿不够的夜晚，你会上什么腿？7天经营，14种结局。">
 <meta property="og:title" content="指鸭为鹅 🪿 烤腿摊求生实录">
-<meta property="og:description" content="鹅腿不够的夜晚，你会上什么腿？进货→出摊→被盘问→上热搜，7夜经营，13种结局。良心选配，售完即止。">
+<meta property="og:description" content="鹅腿不够的夜晚，你会上什么腿？进货→出摊→被盘问→上热搜，7夜经营，14种结局。良心选配，售完即止。">
 <meta property="og:type" content="website">
 <title>指鸭为鹅 🪿 烤腿摊求生实录</title>
 <style>
@@ -123,7 +123,7 @@ h1.logo{font-size:58px;letter-spacing:10px;font-weight:900;
 .supply-row .ln{font-size:14px;font-weight:700}
 .supply-row .ld{font-size:11px;color:var(--ink2);margin-top:1px}
 .stepper{display:flex;align-items:center;gap:8px}
-.stepper button{width:32px;height:32px;border-radius:9px;border:1px solid #d8c5a5;background:#fff3df;font-size:18px;font-weight:700;color:#9a5b22;cursor:pointer}
+.stepper button{width:44px;height:44px;border-radius:11px;border:1px solid #d8c5a5;background:#fff3df;font-size:20px;font-weight:700;color:#9a5b22;cursor:pointer}
 .stepper button:active{transform:scale(.92)}
 .stepper .qty{min-width:26px;text-align:center;font-weight:800;font-size:16px}
 .price-opts{display:flex;gap:8px;margin-top:9px}
@@ -200,6 +200,10 @@ h1.logo{font-size:58px;letter-spacing:10px;font-weight:900;
 .chat-msg.hot b{color:#ffb070}
 .chat-msg.sys{color:#8fa3c7;font-style:italic}
 @keyframes chatin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.chat-reply-wrap{display:flex;flex-direction:column;gap:4px;margin:4px 0;animation:chatin .3s ease}
+.chat-reply-btn{text-align:left;background:rgba(255,138,42,.12);border:1px solid rgba(255,138,42,.35);border-radius:8px;padding:5px 9px;font-size:11.5px;color:#ffe0b3;cursor:pointer;font-family:inherit;transition:all .12s}
+.chat-reply-btn:hover{background:rgba(255,138,42,.25);border-color:rgba(255,138,42,.6)}
+.chat-reply-btn:active{transform:scale(.97)}
 
 /* ---------- summary ---------- */
 .sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
@@ -262,7 +266,8 @@ h1.logo{font-size:58px;letter-spacing:10px;font-weight:900;
   <div class="meta-chips">
     <span>🗓 7天经营</span><span>🎭 14种结局</span><span>🗣 9段盘问</span><span>😇 良心选配</span>
   </div>
-  <button id="btnStart" class="btn btn-primary">🔥 开始出摊</button>
+  <button id="btnStart" class="btn btn-primary">🔥 开���出摊</button>
+  <button id="btnCustMode" class="btn btn-ghost" style="display:none;margin-top:4px;border-color:rgba(126,201,126,.4);color:#7ec97e">🧑‍🎓 顾客视角（通关解锁）</button>
   <div class="row">
     <button class="btn btn-ghost" data-modal="how">📖 玩法</button>
     <button class="btn btn-ghost" data-modal="tips">🤫 老张的悄悄话</button>
@@ -289,6 +294,7 @@ h1.logo{font-size:58px;letter-spacing:10px;font-weight:900;
     </div>
     <div class="day-dots" id="dayDots"></div>
     <div class="row" style="gap:6px">
+      <button id="btnHelp" class="icon-btn" title="攻略">❓</button>
       <button id="btnSound" class="icon-btn" title="音效">🔊</button>
       <button id="btnHome" class="icon-btn" title="回首页">🏠</button>
     </div>
