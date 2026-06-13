@@ -1560,7 +1560,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (dex.length > 0) unlockCustBtn();
   $("btnCustMode").onclick = () => { AUDIO.ensure(); AUDIO.good(); showCustRoleSelect(); };
   $("btnHelp").onclick = () => openModal("tips");
-  $("btnHome").onclick = () => { if (confirm("收摊回首页？本局进度不保存哦")) { stopAmbient(); showLanding(); } };
+  $("btnHome").onclick = () => { if (confirm(CS && !CS.over ? "不排了，回首页？本局进度不保存哦" : "收摊回首页？本局进度不保存哦")) { stopAmbient(); showLanding(); } };
   $("btnSound").textContent = AUDIO.on ? "🔊" : "🔇";
   $("btnSound").onclick = () => {
     AUDIO.on = !AUDIO.on;
