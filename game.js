@@ -983,7 +983,7 @@ function startPublic() {
     if (S.over) return;
     $("evResult").innerHTML = `
       <div class="result-box"><div class="rt">— 选择已经发生 —</div><p>${esc(ch.r)}</p></div>
-      <button class="btn btn-primary cont-btn" id="btnEndDay">😴 睡了，明天还要进货 →</button>`;
+      <button class="btn btn-primary cont-btn" id="btnEndDay">${S.day >= TOTAL_DAYS ? "🌅 天快亮了，这一周终于结束了 →" : "😴 睡了，明天还要进货 →"}</button>`;
     $("btnEndDay").onclick = () => { AUDIO.click(); endDay(); };
   });
   busy = false;
@@ -1047,7 +1047,7 @@ function showEnding(end) {
     ${badges.length ? `<div class="badges">${badges.map(b => `<span class="badge">${b.e} ${b.t}</span>`).join("")}</div>` : ""}
     <div class="end-btns">
       <button class="btn btn-primary" id="btnShare">📋 复制战报，喊朋友来比比</button>
-      <button class="btn btn-ghost" id="btnCustEnd" style="border-color:rgba(126,201,126,.5);color:#7ec97e">🧑‍🎓 换个视角：当一回排队的人</button>
+      <button class="btn btn-ghost" id="btnCustEnd" style="border-color:#7bb86a;color:#3a6e2a;background:#e8f4e0">🧑‍🎓 换个视角：当一回排队的人</button>
       <button class="btn btn-ghost" id="btnAgain">🔥 再摆一周</button>
       <button class="btn btn-ghost" id="btnBack">🏠 回到首页</button>
     </div>
@@ -1405,7 +1405,7 @@ function showCustResult(text, then) {
   let done = false;
   const go = () => { if (done) return; done = true; then(); };
   zone.querySelector(".result-box").onclick = go;
-  setTimeout(go, 3000);
+  setTimeout(go, 1500);
 }
 
 function custEveningPhase(gotDuck) {
@@ -1507,8 +1507,8 @@ function showCustEnding() {
       <div class="end-stat">最终疑心<b>${Math.round(CS.suspicion)}%</b></div>
     </div>
     <div class="end-btns">
-      <button class="btn btn-ghost" id="btnCustAgain" style="padding:12px;font-size:15px">🧑‍🎓 换个角色再来</button>
-      <button class="btn btn-ghost" id="btnBack" style="padding:12px;font-size:15px">🏠 回到首页</button>
+      <button class="btn btn-ghost" id="btnCustAgain">🧑‍🎓 换个角色再来</button>
+      <button class="btn btn-ghost" id="btnBack">🏠 回到首页</button>
     </div>
   </div>`;
   confetti(["🍗", "🧑‍🎓", "✨"]);
